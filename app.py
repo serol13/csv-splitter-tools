@@ -33,7 +33,7 @@ if uploaded_file is not None:
     try:
         df = load_data(uploaded_file)
         
-        st.subheader("👀 Data Preview")
+        st.subheader("Data Preview")
         # Polars head(5) needs to be converted to pandas just for Streamlit display
         st.dataframe(df.head(5).to_pandas(), use_container_width=True)
         
@@ -65,7 +65,7 @@ if uploaded_file is not None:
             st.info(f"Ready to create **{num_unique}** files. Columns being kept: **{cols_remaining}**")
 
             # 3. Processing Logic
-            if st.button("🚀 Fast Generate & Download ZIP"):
+            if st.button("Fast Generate & Download ZIP"):
                 with st.spinner("Polars is multi-threading your data..."):
                     zip_buffer = io.BytesIO()
                     
