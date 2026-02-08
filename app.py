@@ -13,7 +13,7 @@ with st.sidebar:
     st.info("Your data is processed in-memory. **We don't store your data.**")
 
 st.caption("by Asrol")
-st.title(" CSV Splitter (Polars Edition)")
+st.title(" CSV Splitter")
 st.markdown("Optimized for speed. Pick your column, check the file count, and split.")
 st.divider()
 
