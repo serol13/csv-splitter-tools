@@ -27,13 +27,15 @@ uploaded_file = st.file_uploader("Upload your file (CSV or XLSX)", type=["csv", 
 
 if uploaded_file is not None:
     df = None
-    file_bytes = uploaded_file.getvalue() # Get raw bytes to avoid 'source must be string' error
     
-    # --- HANDLING EXCEL SHEETS ---
+    # Extract raw bytes once to use for both sheet inspection and data loading
+    # This prevents the "source must be string or bytes" error
+    file_content = uploaded_file.read()
+
     try:
         if uploaded_file.name.endswith('.xlsx'):
-            # Use BytesIO to make the bytes readable like a file
-            excel_info = fastexcel.read_excel(io.BytesIO(file_bytes))
+            # fastexcel.read_excel often prefers raw bytes over BytesIO
+            excel_info = fastexcel.read_excel(file_content)
             sheet_names = excel_info.sheet_names
             
             selected_sheet = st.selectbox(
@@ -42,11 +44,11 @@ if uploaded_file is not None:
             )
             
             if selected_sheet:
-                # Read the specific sheet from bytes
-                df = pl.read_excel(io.BytesIO(file_bytes), sheet_name=selected_sheet)
+                # Load the data from the raw bytes
+                df = pl.read_excel(file_content, sheet_name=selected_sheet)
         else:
-            # Direct load for CSV from bytes
-            df = pl.read_csv(io.BytesIO(file_bytes))
+            # For CSV, we can use the bytes directly in Polars
+            df = pl.read_csv(file_content)
             df.columns = [c.strip() for c in df.columns]
 
     except Exception as e:
@@ -55,6 +57,7 @@ if uploaded_file is not None:
     # --- DATA PREVIEW AND CONTROLS ---
     if df is not None:
         st.subheader("Data Preview")
+        # Polars to_pandas() is the best way to render in st.dataframe
         st.dataframe(df.head(5).to_pandas(), use_container_width=True)
         
         st.divider()
@@ -64,8 +67,7 @@ if uploaded_file is not None:
         with col1:
             split_column = st.selectbox(
                 "1. Select the column to split by:", 
-                options=all_columns,
-                help="Every unique value in this column will create a separate file."
+                options=all_columns
             )
         
         with col2:
@@ -89,13 +91,15 @@ if uploaded_file is not None:
                     # Drop excluded columns
                     processed_df = df.drop(exclude_cols)
                     
-                    # High-speed partitioning
+                    # High-speed partitioning (The secret to speed in Polars)
                     partitions = processed_df.partition_by(split_column, as_dict=True)
                     
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for value, group_df in partitions.items():
+                            # Extract label from tuple if necessary
                             file_label = str(value[0]) if isinstance(value, tuple) else str(value)
                             
+                            # Convert chunk to CSV bytes
                             csv_bytes = group_df.write_csv().encode('utf-8')
                             
                             file_name = f"{clean_filename(file_label)}.csv"
@@ -106,7 +110,7 @@ if uploaded_file is not None:
                     st.download_button(
                         label="Download ZIP",
                         data=zip_buffer.getvalue(),
-                        file_name=f"Split_{uploaded_file.name.replace('.xlsx', '').replace('.csv', '')}.zip",
+                        file_name=f"Split_{uploaded_file.name.split('.')[0]}.zip",
                         mime="application/zip"
                     )
 
