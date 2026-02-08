@@ -27,11 +27,13 @@ uploaded_file = st.file_uploader("Upload your file (CSV or XLSX)", type=["csv", 
 
 if uploaded_file is not None:
     df = None
+    file_bytes = uploaded_file.getvalue() # Get raw bytes to avoid 'source must be string' error
     
     # --- HANDLING EXCEL SHEETS ---
     try:
         if uploaded_file.name.endswith('.xlsx'):
-            excel_info = fastexcel.read_excel(uploaded_file)
+            # Use BytesIO to make the bytes readable like a file
+            excel_info = fastexcel.read_excel(io.BytesIO(file_bytes))
             sheet_names = excel_info.sheet_names
             
             selected_sheet = st.selectbox(
@@ -40,10 +42,11 @@ if uploaded_file is not None:
             )
             
             if selected_sheet:
-                df = pl.read_excel(uploaded_file, sheet_name=selected_sheet)
+                # Read the specific sheet from bytes
+                df = pl.read_excel(io.BytesIO(file_bytes), sheet_name=selected_sheet)
         else:
-            # Direct load for CSV
-            df = pl.read_csv(uploaded_file)
+            # Direct load for CSV from bytes
+            df = pl.read_csv(io.BytesIO(file_bytes))
             df.columns = [c.strip() for c in df.columns]
 
     except Exception as e:
@@ -91,10 +94,8 @@ if uploaded_file is not None:
                     
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for value, group_df in partitions.items():
-                            # Handle tuple values from partition_by
                             file_label = str(value[0]) if isinstance(value, tuple) else str(value)
                             
-                            # Write to CSV bytes
                             csv_bytes = group_df.write_csv().encode('utf-8')
                             
                             file_name = f"{clean_filename(file_label)}.csv"
@@ -105,7 +106,7 @@ if uploaded_file is not None:
                     st.download_button(
                         label="Download ZIP",
                         data=zip_buffer.getvalue(),
-                        file_name=f"Split_{uploaded_file.name}.zip",
+                        file_name=f"Split_{uploaded_file.name.replace('.xlsx', '').replace('.csv', '')}.zip",
                         mime="application/zip"
                     )
 
