@@ -6,16 +6,16 @@ import re
 import fastexcel
 
 # Page Config
-st.set_page_config(page_title="Universal Data Splitter", page_icon="✂️", layout="wide")
+st.set_page_config(page_title="Universal Data Splitter", layout="wide")
 
 # --- SIDEBAR PRIVACY NOTICE ---
 with st.sidebar:
-    st.header("🔒 Privacy & Security")
-    st.info("Your data is processed in-memory. **We don't store your data.**")
+    st.header("Privacy and Security")
+    st.info("Your data is processed in-memory using Polars. Data is not stored on our servers.")
 
 st.caption("by Asrol")
-st.title("Universal CSV & Excel Splitter")
-st.markdown("Upload a **CSV** or **XLSX**, select your sheet, and split by column with a full preview.")
+st.title("Universal CSV and Excel Splitter")
+st.markdown("Upload a file, select your preferences, and split by column with a full preview.")
 st.divider()
 
 def clean_filename(name):
@@ -28,15 +28,14 @@ uploaded_file = st.file_uploader("Upload your file (CSV or XLSX)", type=["csv", 
 if uploaded_file is not None:
     df = None
     
-    # --- STEP A: LOAD DATA ---
+    # --- HANDLING EXCEL SHEETS ---
     try:
         if uploaded_file.name.endswith('.xlsx'):
-            # Peek at sheet names first
             excel_info = fastexcel.read_excel(uploaded_file)
             sheet_names = excel_info.sheet_names
             
             selected_sheet = st.selectbox(
-                "Select the sheet you want to split:",
+                "Select the sheet to process:",
                 options=sheet_names
             )
             
@@ -50,10 +49,9 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Error reading file: {e}")
 
-    # --- STEP B: PREVIEW & CONTROLS ---
+    # --- DATA PREVIEW AND CONTROLS ---
     if df is not None:
         st.subheader("Data Preview")
-        # Convert to Pandas only for the UI display
         st.dataframe(df.head(5).to_pandas(), use_container_width=True)
         
         st.divider()
@@ -62,28 +60,27 @@ if uploaded_file is not None:
         
         with col1:
             split_column = st.selectbox(
-                "1. Which column determines the split?", 
+                "1. Select the column to split by:", 
                 options=all_columns,
-                help="Every unique value here creates a new file."
+                help="Every unique value in this column will create a separate file."
             )
         
         with col2:
             exclude_cols = st.multiselect(
-                "2. Columns to EXCLUDE (Optional)", 
+                "2. Select columns to exclude (Optional):", 
                 options=[c for c in all_columns if c != split_column]
             )
         
-        # --- STEP C: FILE COUNT PREVIEW ---
+        # --- PREVIEW LOGIC ---
         if split_column:
-            unique_values = df[split_column].dropna().unique().to_list()
-            num_unique = len(unique_values)
+            num_unique = df[split_column].n_unique()
             cols_remaining = len(all_columns) - len(exclude_cols)
             
-            st.info(f" **Ready to create {num_unique} files.** Each file will contain **{cols_remaining}** columns.")
+            st.info(f"Ready to create {num_unique} files. Each file will contain {cols_remaining} columns.")
 
-            # --- STEP D: PROCESSING ---
-            if st.button(" Generate & Download ZIP"):
-                with st.spinner("Polars is splitting and zipping your data..."):
+            # --- PROCESSING ---
+            if st.button("Generate and Download ZIP"):
+                with st.spinner("Processing data..."):
                     zip_buffer = io.BytesIO()
                     
                     # Drop excluded columns
@@ -103,15 +100,9 @@ if uploaded_file is not None:
                             file_name = f"{clean_filename(file_label)}.csv"
                             zip_file.writestr(file_name, csv_bytes)
 
-                    st.success(f"✅ Successfully created {len(partitions)} files!")
+                    st.success(f"Successfully created {len(partitions)} files.")
                     
                     st.download_button(
-                        label="📥 Download ZIP",
+                        label="Download ZIP",
                         data=zip_buffer.getvalue(),
-                        file_name=f"Split_{uploaded_file.name}.zip",
-                        mime="application/zip"
-                    )
-
-# --- FOOTER ---
-st.divider()
-st.caption("Privacy Guarantee: We don't store your data. All processing happens in live memory.")
+                        file
