@@ -105,4 +105,10 @@ if uploaded_file is not None:
                     st.download_button(
                         label="Download ZIP",
                         data=zip_buffer.getvalue(),
-                        file
+                        file_name=f"Split_{uploaded_file.name}.zip",
+                        mime="application/zip"
+                    )
+
+# --- FOOTER ---
+st.divider()
+st.caption("Privacy Guarantee: We do not store your data. All processing occurs in live memory.")
