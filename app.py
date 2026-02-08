@@ -1,87 +1,90 @@
 import streamlit as st
-import pandas as pd
+import polars as pl
 import io
 import zipfile
 import re
 
 # Page Config
-st.set_page_config(page_title="Universal CSV Splitter", page_icon="✂️", layout="wide")
+st.set_page_config(page_title="Ultra-Fast CSV Splitter", page_icon="⚡", layout="wide")
 
 # --- SIDEBAR PRIVACY NOTICE ---
 with st.sidebar:
     st.header("🔒 Privacy & Security")
-    st.info("Your data is processed in-memory and is **not stored** on our servers. Once you refresh or close this tab, the data is wiped.")
+    st.info("Your data is processed in-memory using Polars (Rust-backed) and is **not stored**.")
 
-# --- HEADER SECTION ---
 st.caption("by Asrol")
-st.title("Universal CSV Splitter + Data Cleaner")
-st.markdown("Upload any CSV, pick your split column, and remove any sensitive data before zipping.")
+st.title("⚡ Ultra-Fast CSV Splitter (Polars Edition)")
+st.markdown("Optimized for large files. Process 600MB+ in seconds without external servers.")
 st.divider()
 
 def clean_filename(name):
-    """Removes invalid characters for Windows/Mac filenames."""
+    """Removes invalid characters for filenames."""
     return re.sub(r'[\\/*?:"<>|]', "-", str(name)).strip()
 
 # 1. File Uploader
-uploaded_file = st.file_uploader("Upload your CSV file (Max 600MB)", type="csv")
+uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
 
 if uploaded_file is not None:
-    # 2. Read Data
-    df = pd.read_csv(uploaded_file)
-    df.columns = df.columns.str.strip()
-    
-    st.subheader("👀 Data Preview")
-    st.dataframe(df.head(5), use_container_width=True)
-    
-    # 3. Dynamic Selection Controls
-    st.divider()
-    col1, col2 = st.columns(2)
-    
-    all_columns = df.columns.tolist()
-    
-    with col1:
-        split_column = st.selectbox(
-            "1. Which column determines the split?",
-            options=all_columns,
-            help="Every unique value here creates a new file."
-        )
-    
-    with col2:
-        exclude_cols = st.multiselect(
-            "2. Columns to EXCLUDE (Optional)",
-            options=[c for c in all_columns if c != split_column],
-            help="Selected columns will be REMOVED from the final files."
-        )
-    
-    if split_column:
-        unique_values = df[split_column].dropna().unique()
-        st.info(f"Ready to create **{len(unique_values)}** files. Columns being kept: **{len(all_columns) - len(exclude_cols)}**")
+    # 2. Read Data with Polars (Much faster than pd.read_csv)
+    # We wrap this in a cache so it doesn't re-read on every button click
+    @st.cache_data
+    def load_data(file):
+        return pl.read_csv(file)
 
-        # 4. Processing
-        if st.button("🚀 Generate & Download ZIP"):
-            with st.spinner("Cleaning data and zipping..."):
+    try:
+        df = load_data(uploaded_file)
+        
+        st.subheader("👀 Data Preview")
+        st.dataframe(df.head(5).to_pandas(), use_container_width=True)
+        
+        # 3. Dynamic Selection Controls
+        st.divider()
+        col1, col2 = st.columns(2)
+        all_columns = df.columns
+        
+        with col1:
+            split_column = st.selectbox("1. Which column determines the split?", options=all_columns)
+        
+        with col2:
+            exclude_cols = st.multiselect(
+                "2. Columns to EXCLUDE", 
+                options=[c for c in all_columns if c != split_column]
+            )
+        
+        # 4. Processing Logic
+        if st.button("🚀 Fast Generate & Download"):
+            with st.spinner("Polars is multi-threading your data..."):
                 zip_buffer = io.BytesIO()
                 
-                # Drop the excluded columns
-                processed_df = df.drop(columns=exclude_cols)
+                # Drop columns efficiently
+                processed_df = df.drop(exclude_cols)
                 
-                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                    for value in unique_values:
-                        filtered_data = processed_df[processed_df[split_column] == value]
-                        csv_string = filtered_data.to_csv(index=False).encode('utf-8')
+                # Polars 'partition_by' is significantly faster than a Python for-loop
+                # It splits the dataframe into a list of dataframes in one go
+                partitions = processed_df.partition_by(split_column, as_dict=True)
+                
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for value, group_df in partitions.items():
+                        # value is a tuple because partition_by supports multiple columns
+                        file_label = str(value[0]) if isinstance(value, tuple) else str(value)
                         
-                        file_name = f"{clean_filename(value)}.csv"
-                        zip_file.writestr(file_name, csv_string)
+                        # Convert to CSV bytes directly from Polars
+                        csv_bytes = group_df.write_csv().encode('utf-8')
+                        
+                        file_name = f"{clean_filename(file_label)}.csv"
+                        zip_file.writestr(file_name, csv_bytes)
 
-                st.success("✅ Your files are ready!")
+                st.success(f"✅ Created {len(partitions)} files instantly!")
                 
-                # 5. Download Button
                 st.download_button(
                     label="📥 Download ZIP",
                     data=zip_buffer.getvalue(),
-                    file_name=f"Cleaned_Split_by_{split_column}.zip",
+                    file_name=f"Split_by_{split_column}.zip",
                     mime="application/zip"
                 )
+
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
 
 # --- FOOTER ---
 st.divider()
