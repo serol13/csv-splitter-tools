@@ -7,11 +7,14 @@ import re
 # Page Config
 st.set_page_config(page_title="Universal CSV Splitter", page_icon="✂️", layout="wide")
 
-# --- HEADER SECTION ---
-# This adds your name as a professional sub-header at the very top
-st.caption("🚀 Developed by Asrol")
+# --- SIDEBAR PRIVACY NOTICE ---
+with st.sidebar:
+    st.header("🔒 Privacy & Security")
+    st.info("Your data is processed in-memory and is **not stored** on our servers. Once you refresh or close this tab, the data is wiped.")
 
-st.title("✂️ Universal CSV Splitter + Data Cleaner")
+# --- HEADER SECTION ---
+st.caption("by Asrol")
+st.title("Universal CSV Splitter + Data Cleaner")
 st.markdown("Upload any CSV, pick your split column, and remove any sensitive data before zipping.")
 st.divider()
 
@@ -79,3 +82,7 @@ if uploaded_file is not None:
                     file_name=f"Cleaned_Split_by_{split_column}.zip",
                     mime="application/zip"
                 )
+
+# --- FOOTER ---
+st.divider()
+st.caption("Privacy Guarantee: We don't store your data. All processing happens live.")
